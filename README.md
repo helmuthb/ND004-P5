@@ -9,7 +9,6 @@ application
 The Server IP address is `52.24.129.145`.
 It has a public DNS A-Record: `ec2-52-24-129-145.us-west-2.compute.amazonaws.com`.
 
-
 ## Running the website
 
 To use the web site it is mandatory to use the name, as Google Sign In does not
@@ -32,14 +31,57 @@ pip install httplib2
 pip install Flask-Markdown
 ```
 
+SSH has been configured to use port 2200 instead of the default 22
+through changes in the file `/etc/ssh/sshd_config`, and root login
+has been disabled as well:
+```
+...
+# What ports, IPs and protocols we listen for
+# Changed to port 2200 instead of default 22
+Port 2200
+...
+# PermitRootLogin without-password
+# I disabled root login - only user grader can sudo
+PermitRootLogin no
+...
+```
+
 I configured `ufw` to allow SSH connections on port 2200, and I configured
 `unattended-upgrades` to automatically install updates.
+```
+ufw enable
+ufw allow 2200/tcp
+ufw allow 80/tcp
+ufw allow 123/udp
 
-I also installed `fail2ban` to block repeated attacks on SSH.
+dpkg-reconfigure unattended-upgrades
+```
+
+I also installed `fail2ban` to block repeated attacks on SSH:
+```
+apt-get install fail2ban
+cd /etc/fail2ban
+cp jail.conf jail.local
+vi jail.local # update port for SSH from 22 to 2200
+```
 
 I added two users, `grader` and `helmuth`. The user `helmuth`
 is used to actually run the application.
-I disabled root login and have added grader the right to sudo with password.
+The password for the `grader` was generated using
+[strongpasswordgenerator.com], 15 characters, avoiding similar characters and
+avoiding programming punctuation.
+The password for `helmuth` is disabled in `/etc/shadow`.
+For both users the file `$HOME/.ssh/authorized_keys` has been created with the
+public key used to access the machine.
+
+I disabled `root` login and have added `grader` the right to sudo with password
+using `visudo`:
+```
+...
+# Give grader access to root
+grader ALL=(ALL) ALL
+...
+```
 
 While my application is using sqlite (at the time of Project 3 I never intended
 to host it as a production application) I have still installed `postgresql`
@@ -47,7 +89,11 @@ together with a database `helmuth` and a user `helmuth`.
 
 I also installed `monit` to allow monitoring. It is listening on port `2812` on
 `localhost` - to access the website you have to establish port forwarding. The
-password is in the config file /etc/monit/monitrc which is only readibly by root.
+password is in the config file `/etc/monit/monitrc` which is only readibly by root.
+```
+apt-get install monit
+vi /etc/monit/monitrc
+```
 
 Some adjustments were necessary on the appliction to make it run with `mod_wsgi`.
 Some of the initialization code was within the `main` block, I had to move it
@@ -82,7 +128,9 @@ os.chdir('/home/helmuth/ND004-P3/vagrant/catalog')
 from application import app as application
 ```
 
-And here is the Apache configuration for the application:
+In Apache the default website has been disabled (`a2dissite 000-default`) and a new
+config file for the wsgi-based site has been added and enabled
+(`vi /etc/apache2/sites-available/wsgi.conf`, `a2ensite wsgi`):
 ```
 <VirtualHost *>
     # specify the server name - Google OAuth only works with a real name,
